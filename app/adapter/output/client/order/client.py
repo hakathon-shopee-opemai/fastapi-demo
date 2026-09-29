@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import time
+from typing import Any
 
 import httpx
 
@@ -34,7 +35,7 @@ async def close_order_client() -> None:
     _client = None
 
 
-def get_order_client() -> "OrderServiceClient":
+def get_order_client() -> OrderServiceClient:
     if _client is None:
         raise RuntimeError("Order client not initialized; call init_order_client() first.")
     return OrderServiceClient(_client)
@@ -76,3 +77,17 @@ class OrderServiceClient:
         resp = await self._client.get(path, headers=headers)
         resp.raise_for_status()
         return resp.json()
+
+    async def get_return_history(self, customer_id: str) -> dict[str, Any]:
+        """Reverse parallax hop: GET the customer's return history (HMAC-signed)."""
+        path = f"/internal/customers/{customer_id}/return-history"
+        ts = str(int(time.time()))
+        headers = {
+            TRACE_HEADER: get_trace_id(),
+            TIMESTAMP_HEADER: ts,
+            SIGNATURE_HEADER: sign("GET", path, ts, b""),
+        }
+        resp = await self._client.get(path, headers=headers)
+        resp.raise_for_status()
+        data: dict[str, Any] = resp.json()
+        return data
