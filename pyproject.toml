@@ -1,0 +1,52 @@
+[project]
+name = "risk-service"
+version = "0.1.0"
+description = "parallax risk-service (FastAPI / hexagonal + DDD)"
+requires-python = ">=3.13"
+dependencies = [
+    # --- Web (driving adapter) ---
+    "fastapi>=0.141.1",
+    "uvicorn[standard]>=0.54.0",
+    # --- Config & validation ---
+    "pydantic>=2.9",
+    "pydantic-settings>=2.5",
+    # --- Persistence (driven adapter): async SQLAlchemy + PostgreSQL + Alembic ---
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.30",
+    "alembic>=1.13",
+    # --- Caching (driven adapter): async Redis ---
+    "redis>=5.1",
+    # --- Outbound HTTP client back to the Spring order-service (parallax hop) ---
+    "httpx>=0.27",
+    # --- Structured logging ---
+    "structlog>=24.4",
+    "python-json-logger>=2.0",
+    # --- Service-to-service auth (HMAC/JWT) ---
+    "pyjwt>=2.9",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "testcontainers[postgres]>=4.8",
+    "ruff>=0.7",
+    "mypy>=1.11",
+]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 100
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "ASYNC"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+plugins = ["pydantic.mypy"]

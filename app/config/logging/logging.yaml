@@ -1,0 +1,79 @@
+# Standard dictConfig for risk-service (local / non-container).
+# Loaded by config/logging bootstrap (to be implemented) via logging.config.dictConfig.
+# structlog wraps this stdlib backend; per-event processors live in
+# common/logging/processors, correlation id in common/logging/context.
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  console:
+    format: "%(asctime)s %(levelname)-5s [%(name)s] [trace_id=%(trace_id)s span_id=%(span_id)s] %(message)s"
+    datefmt: "%Y-%m-%dT%H:%M:%S%z"
+  json:
+    "()": pythonjsonlogger.jsonlogger.JsonFormatter
+    format: "%(asctime)s %(levelname)s %(name)s %(message)s %(trace_id)s %(span_id)s"
+    rename_fields:
+      asctime: "@timestamp"
+      levelname: level
+    static_fields:
+      service: risk-service
+
+# A default trace_id/span_id so records without MDC still format cleanly.
+# The real values are injected by a logging filter bound to a contextvar.
+filters:
+  correlation:
+    "()": logging.Filter        # placeholder; replaced by CorrelationIdFilter later
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    stream: ext://sys.stdout
+    formatter: console
+    filters: [correlation]
+  file:
+    class: logging.handlers.RotatingFileHandler
+    filename: logs/risk-service.log
+    maxBytes: 52428800          # 50 MB
+    backupCount: 14
+    encoding: utf-8
+    formatter: json
+    filters: [correlation]
+  error_file:
+    class: logging.handlers.RotatingFileHandler
+    filename: logs/risk-service-error.log
+    level: ERROR
+    maxBytes: 52428800
+    backupCount: 30
+    encoding: utf-8
+    formatter: json
+    filters: [correlation]
+
+loggers:
+  app:
+    level: DEBUG
+    handlers: [console, file, error_file]
+    propagate: false
+  uvicorn:
+    level: INFO
+    handlers: [console, file]
+    propagate: false
+  uvicorn.access:
+    level: INFO
+    handlers: [console]
+    propagate: false
+  uvicorn.error:
+    level: INFO
+    handlers: [console, error_file]
+    propagate: false
+  sqlalchemy.engine:
+    level: WARNING
+    handlers: [console]
+    propagate: false
+  httpx:
+    level: INFO
+    handlers: [console]
+    propagate: false
+
+root:
+  level: INFO
+  handlers: [console]
