@@ -11,7 +11,6 @@ import app.adapter.output.persistence.risk.entity.models  # noqa: E402,F401
 from app.adapter.input.web.auth.router import router as auth_router
 from app.adapter.input.web.demo.router import router as demo_router
 from app.adapter.input.web.health.router import router as health_router
-from app.adapter.input.web.internal.router import router as internal_router
 from app.adapter.input.web.internal.saga_router import router as internal_saga_router
 from app.adapter.input.web.return_risk.router.router import internal_return_risk_router
 from app.adapter.input.web.risk.router.router import internal_risk_router, public_risk_router
@@ -51,7 +50,6 @@ def create_app() -> FastAPI:
     register_exception_handlers(app)
 
     app.include_router(health_router)
-    app.include_router(internal_router)
     app.include_router(internal_saga_router)
     app.include_router(internal_risk_router)
     app.include_router(internal_return_risk_router)

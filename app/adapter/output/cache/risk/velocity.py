@@ -41,6 +41,15 @@ class RedisVelocityCounter:
             count, _ = await pipe.execute()
         return int(count)
 
+    async def incr_sku_and_count(self, product_id: str, window_seconds: int) -> int:
+        """Count how often a SKU was ordered in the window (flash-fraud on hot items)."""
+        key = f"risk:velocity:sku:{product_id}:1h"
+        async with self._redis.pipeline(transaction=True) as pipe:
+            pipe.incr(key)
+            pipe.expire(key, window_seconds)
+            count, _ = await pipe.execute()
+        return int(count)
+
     async def adjust(
         self,
         customer_id: str,

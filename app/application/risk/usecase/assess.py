@@ -15,6 +15,8 @@ from app.domain.risk.vo.snapshot import OrderSnapshot
 
 VELOCITY_WINDOW_SECONDS = 3600
 ASSESSMENT_TTL_SECONDS = 600
+# a SKU ordered this many times per hour counts like one extra in-flight order of the customer
+SKU_VELOCITY_PER_ORDER = 25
 
 
 class AssessOrderRiskService:
@@ -31,11 +33,18 @@ class AssessOrderRiskService:
         self._history = history
 
     async def assess(self, command: AssessOrderRiskCommand) -> RiskAssessment:
-        cached = await self._cache.get(command.order_id)
-        if cached is not None:
-            return cached
+        # idempotency: the persisted assessment is the source of truth (cache is write-through)
+        existing = await self._repo.find_by_order_id(command.order_id)
+        if existing is not None:
+            return existing
 
         velocity_count = await self._velocity.incr_and_count(command.customer_id, VELOCITY_WINDOW_SECONDS)
+        for line in command.lines:
+            sku_count = await self._velocity.incr_sku_and_count(
+                line.product_id, VELOCITY_WINDOW_SECONDS
+            )
+            if sku_count >= SKU_VELOCITY_PER_ORDER:
+                velocity_count += sku_count // SKU_VELOCITY_PER_ORDER
         history = await self._history.fetch(command.customer_id)
 
         snapshot = OrderSnapshot(

@@ -1,14 +1,11 @@
 """Signed httpx client to the peer order-service (the reverse parallax hop)."""
 from __future__ import annotations
 
-import json
 import time
 from typing import Any
 
 import httpx
 
-from app.common.exception.code import ErrorCode
-from app.common.exception.model import AppError
 from app.common.logging.context import TRACE_HEADER, get_trace_id
 from app.config.security.hmac import SIGNATURE_HEADER, TIMESTAMP_HEADER, sign
 from app.config.settings.settings import get_settings
@@ -44,26 +41,6 @@ def get_order_client() -> OrderServiceClient:
 class OrderServiceClient:
     def __init__(self, client: httpx.AsyncClient) -> None:
         self._client = client
-
-    async def echo(self, message: str) -> dict:
-        path = "/internal/echo"
-        body = json.dumps({"message": message}).encode()
-        ts = str(int(time.time()))
-        headers = {
-            "Content-Type": "application/json",
-            TRACE_HEADER: get_trace_id(),
-            TIMESTAMP_HEADER: ts,
-            SIGNATURE_HEADER: sign("POST", path, ts, body),
-        }
-        try:
-            resp = await self._client.post(path, content=body, headers=headers)
-            resp.raise_for_status()
-            return resp.json()
-        except httpx.HTTPError as exc:
-            raise AppError(
-                ErrorCode.UPSTREAM_UNAVAILABLE, 502, f"order-service call failed: {exc}"
-            ) from exc
-
 
     async def get_order_history(self, customer_id: str) -> dict:
         """Reverse parallax hop: GET the customer's committed order history (HMAC-signed)."""
