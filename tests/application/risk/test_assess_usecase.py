@@ -14,13 +14,19 @@ pytestmark = pytest.mark.asyncio
 
 
 class FakeVelocity:
-    def __init__(self, count: int) -> None:
+    def __init__(self, count: int, sku_count: int = 0) -> None:
         self.count = count
+        self.sku_count = sku_count
         self.calls = 0
+        self.skus: list[str] = []
 
     async def incr_and_count(self, customer_id: str, window_seconds: int) -> int:
         self.calls += 1
         return self.count
+
+    async def incr_sku_and_count(self, product_id: str, window_seconds: int) -> int:
+        self.skus.append(product_id)
+        return self.sku_count
 
 
 class FakeHistory:
@@ -98,14 +104,40 @@ async def test_blocked_rejects():
     assert result.decision is RiskDecision.REJECT
 
 
-async def test_cache_hit_short_circuits_velocity():
-    cache = InMemoryCache()
+async def test_persisted_assessment_short_circuits_velocity():
     velocity = FakeVelocity(0)
-    svc = AssessOrderRiskService(InMemoryRepo(), cache, velocity, FakeHistory(_history()))
+    svc = AssessOrderRiskService(InMemoryRepo(), InMemoryCache(), velocity, FakeHistory(_history()))
     first = await svc.assess(_command("100"))
     second = await svc.assess(_command("100"))
     assert second is first
-    assert velocity.calls == 1  # second call served from cache
+    assert velocity.calls == 1  # second call served from the repository
+
+
+async def test_every_line_bumps_sku_velocity():
+    velocity = FakeVelocity(0)
+    svc = AssessOrderRiskService(InMemoryRepo(), InMemoryCache(), velocity, FakeHistory(_history()))
+    cmd = AssessOrderRiskCommand(
+        order_id="o-2",
+        customer_id="c-1",
+        total=Decimal("30"),
+        currency="USD",
+        shipping_country="VN",
+        lines=(
+            OrderLineSnapshot("p-1", 1, Decimal("10")),
+            OrderLineSnapshot("p-2", 2, Decimal("10")),
+        ),
+    )
+    await svc.assess(cmd)
+    assert velocity.skus == ["p-1", "p-2"]
+
+
+async def test_hot_sku_raises_velocity():
+    calm = await _service(velocity=0).assess(_command("100"))
+    hot_svc = AssessOrderRiskService(
+        InMemoryRepo(), InMemoryCache(), FakeVelocity(0, sku_count=500), FakeHistory(_history())
+    )
+    hot = await hot_svc.assess(_command("100"))
+    assert hot.score > calm.score
 
 
 async def test_history_unavailable_flagged():

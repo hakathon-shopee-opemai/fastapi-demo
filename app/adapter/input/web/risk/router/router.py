@@ -9,6 +9,7 @@ from app.adapter.input.web.risk.schema.request.schemas import AssessRiskRequest
 from app.adapter.input.web.risk.schema.response.schemas import AssessmentResponse
 from app.common.exception.code import ErrorCode
 from app.common.exception.model import AppError
+from app.common.ratelimit import rate_limited
 from app.config.database.engine import get_session
 from app.config.di.providers import build_assess_usecase, build_get_usecase
 from app.config.security.hmac import require_service_signature
@@ -23,6 +24,7 @@ public_risk_router = APIRouter(prefix="/api/v1", tags=["risk"])
     response_model=AssessmentResponse,
     dependencies=[Depends(require_service_signature)],
 )
+@rate_limited("risk.assess", permits=200, window_seconds=60)
 async def assess_risk(request: AssessRiskRequest, session: AsyncSession = Depends(get_session)) -> AssessmentResponse:
     assessment = await build_assess_usecase(session).assess(to_command(request))
     return to_response(assessment)

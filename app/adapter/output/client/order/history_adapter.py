@@ -1,12 +1,13 @@
-"""CustomerHistoryPort adapter: reverse hop to order-service with 1 retry + safe fallback."""
+"""CustomerHistoryPort adapter: reverse hop to order-service with retry + safe fallback."""
 from __future__ import annotations
 
-import asyncio
-import random
 from datetime import datetime
 from decimal import Decimal
 
+import httpx
+
 from app.adapter.output.client.order.client import get_order_client
+from app.common.resilience import retry
 from app.domain.risk.vo.snapshot import CustomerHistory
 from app.domain.risk.vo.types import AccountStatus, CustomerTier
 
@@ -31,12 +32,11 @@ class HttpCustomerHistoryAdapter:
     """Never fails the assessment: on error returns CustomerHistory.unknown()."""
 
     async def fetch(self, customer_id: str) -> CustomerHistory:
-        for attempt in range(2):
-            try:
-                return _map(await get_order_client().get_order_history(customer_id))
-            except Exception:  # noqa: BLE001 - fall back conservatively, one retry
-                if attempt == 0:
-                    await asyncio.sleep(random.uniform(0.05, 0.15))
-                    continue
-                return CustomerHistory.unknown()
-        return CustomerHistory.unknown()
+        try:
+            return _map(await self._get(customer_id))
+        except (httpx.HTTPError, KeyError, ValueError):
+            return CustomerHistory.unknown()
+
+    @retry(attempts=3, backoff_seconds=0.1, on=(httpx.HTTPError,))
+    async def _get(self, customer_id: str) -> dict:
+        return await get_order_client().get_order_history(customer_id)
